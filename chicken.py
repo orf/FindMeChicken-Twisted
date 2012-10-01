@@ -6,7 +6,7 @@ from sources import kfc, just_eat, Location, GeoPoint
 import operator
 import logging
 import time
-
+import sys
 
 SOURCES = {
     "KFC":kfc.KFCSource(),
@@ -57,3 +57,6 @@ def chicken_finder(request):
     t2 = time.time()
     print "Request took %s"%(t2-t1)
     defer.returnValue(json.dumps(returner))
+
+if "--run" in sys.argv:
+    run("localhost",8080)

@@ -60,7 +60,9 @@ class JustEatSource(ChickenSource):
 
             place = {"title":place_root_tag.find("h2").text}
 
-            types_of_food = set(place_root_tag.find("p", attrs={"class":"cuisineTypeList"}).text.lower().split(","))
+            types_of_food = set([x.strip()
+                                 for x in place_root_tag.find("p", attrs={"class":"cuisineTypeList"}).text.lower().split(",")])
+
             if not ALLOWED_FOOD_TYPES.intersection(types_of_food):
                 print "Skipping place %s"%place["title"]
                 continue
