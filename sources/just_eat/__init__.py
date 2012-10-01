@@ -1,5 +1,5 @@
 from sources import ChickenSource, ChickenPlace, GeoPoint
-from twisted.internet import defer
+from twisted.internet import defer, reactor, threads
 from twisted.web.client import getPage
 import logging
 from lib import cache, geo
@@ -17,6 +17,13 @@ ALLOWED_FOOD_TYPES = set(("pizza","kebabs","american"))
 
 place_cache = cache.getCache("place_cache")
 menu_cache = cache.getCache("menu_cache")
+
+HAS_LXML = False
+try:
+    import lxml
+    HAS_LXML = True
+except ImportError:
+    print "Lxml not detected: Consider installing it for a speed boost"
 
 class JustEatSource(ChickenSource):
     NAME = "JustEat"
@@ -102,7 +109,11 @@ class JustEatSource(ChickenSource):
         just_eat_page = yield getPage(str(HOST+info["identifier"]))
         t1 = time.time()
         print "Inserting ID %s"%id
-        parser = BeautifulSoup(just_eat_page, "lxml")
+        if HAS_LXML:
+            parser = yield threads.deferToThread(BeautifulSoup, just_eat_page, "lxml")
+        else:
+            parser = BeautifulSoup(just_eat_page)
+
         print "%s - Parsed in %s"%(id,str(time.time()-t1))
         has_chicken = False
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
