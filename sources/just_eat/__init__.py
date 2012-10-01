@@ -32,7 +32,7 @@ class JustEatSource(ChickenSource):
             defer.returnValue(cache_result)
 
         just_eat_page = yield getPage(str(HOST+place_id), agent=IOS_USER_AGENT)
-        parser = BeautifulSoup(just_eat_page)
+        parser = BeautifulSoup(just_eat_page, "lxml")
 
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
             if "chicken" in tag.text.lower():
@@ -54,12 +54,12 @@ class JustEatSource(ChickenSource):
 
         just_eat_page = yield getPage(BASE_URL.format(location.postcode),
             agent=IOS_USER_AGENT)
-        parser = BeautifulSoup(just_eat_page)
+        parser = BeautifulSoup(just_eat_page, "lxml")
         open_places_tag = parser.find(id="OpenRestaurants")
         page_places = {}
         for place_root_tag in open_places_tag.findAll("li"):
 
-            place = {"title":place_root_tag.find("h2").text}
+            place = {"title":place_root_tag.find("h2").text.strip()}
 
             types_of_food = set([x.strip()
                                  for x in place_root_tag.find("p", attrs={"class":"cuisineTypeList"}).text.lower().split(",")])
@@ -102,7 +102,7 @@ class JustEatSource(ChickenSource):
         just_eat_page = yield getPage(str(HOST+info["identifier"]))
         t1 = time.time()
         print "Inserting ID %s"%id
-        parser = BeautifulSoup(just_eat_page)
+        parser = BeautifulSoup(just_eat_page, "lxml")
         print "%s - Parsed in %s"%(id,str(time.time()-t1))
         has_chicken = False
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
