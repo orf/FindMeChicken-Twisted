@@ -23,5 +23,5 @@ def setup_database():
 
 setup_database()
 
-pool = adbapi.ConnectionPool("sqlite3", settings.JUST_EAT_DB_NAME)
+pool = adbapi.ConnectionPool("sqlite3", settings.JUST_EAT_DB_NAME, check_same_thread=False)
 
