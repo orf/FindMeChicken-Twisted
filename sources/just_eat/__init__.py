@@ -98,7 +98,7 @@ class FetchChickenPlace(child.AMPChild):
         # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
         print "%s Page to return is %s"%(id, str(time.time()-t1))
         if has_chicken:
-            returner = json.dumps(place)
+            returner = json.dumps(place._asdict())
         else:
             returner = json.dumps({})
         defer.returnValue({"has_chicken":has_chicken,
@@ -187,8 +187,9 @@ class JustEatSource(ChickenSource):
                 if success:
                     if result["has_chicken"]:
                         place_dict = json.loads(result["place"])
+                        print place_dict
                         place_dict["location"] = GeoPoint(*place_dict["location"])
-                        place = ChickenPlace(*place_dict)
+                        place = ChickenPlace(**place_dict)
                         returner.update({result["id"]:place})
 
         place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
