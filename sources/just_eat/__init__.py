@@ -49,13 +49,13 @@ class JustEatSource(ChickenSource):
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):
 
-        cache_result = place_cache.get(location.postcode)
-        if cache_result is not None:
-            defer.returnValue(cache_result)
-
         if not location.postcode:
             logging.info("No postcode given in location, cannot get ChickenPlaces")
             defer.returnValue({})
+
+        cache_result = place_cache.get(location.postcode)
+        if cache_result is not None:
+            defer.returnValue(cache_result)
 
         returner = {}
 
@@ -63,6 +63,9 @@ class JustEatSource(ChickenSource):
             agent=IOS_USER_AGENT)
         parser = BeautifulSoup(just_eat_page, "lxml")
         open_places_tag = parser.find(id="OpenRestaurants")
+        if open_places_tag is None:
+            defer.returnValue({})
+
         page_places = {}
         for place_root_tag in open_places_tag.findAll("li"):
 
@@ -181,4 +184,3 @@ class JustEatSource(ChickenSource):
                 )
 
         defer.returnValue((returner, no_chicken))
-
