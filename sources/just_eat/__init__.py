@@ -12,6 +12,8 @@ IOS_USER_AGENT = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_2 like Mac OS X; en-
 HOST = "http://www.just-eat.co.uk"
 BASE_URL = HOST + "/area/{0}"
 
+ALLOWED_FOOD_TYPES = set(("pizza","kebabs","american"))
+
 place_cache = cache.getCache("place_cache")
 menu_cache = cache.getCache("menu_cache")
 
@@ -55,7 +57,14 @@ class JustEatSource(ChickenSource):
         open_places_tag = parser.find(id="OpenRestaurants")
         page_places = {}
         for place_root_tag in open_places_tag.findAll("li"):
+
             place = {"title":place_root_tag.find("h2").text}
+
+            types_of_food = set(place_root_tag.find("p", attrs={"class":"cuisineTypeList"}).text.lower().split(","))
+            if not ALLOWED_FOOD_TYPES.intersection(types_of_food):
+                print "Skipping place %s"%place["title"]
+                continue
+
             place["identifier"] = place_root_tag.find("a")["href"]
             page_places[int(place_root_tag["data-restaurantid"])] = place
 
