@@ -1,5 +1,5 @@
 from sources import ChickenSource, ChickenPlace, GeoPoint
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 from twisted.web.client import getPage
 import logging
 from lib import cache, geo
@@ -87,13 +87,6 @@ class FetchChickenPlace(child.AMPChild):
             distance=None
         )
 
-        print "%s - Page to DB is %s"%(id, str(time.time()-t1))
-
-        #insert_command = \
-        #    """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
-        #    VALUES (?, ?, ?, ?, ?, ?, ?)"""
-        #    (id, place.id, place.title, place.address, "%s,%s"%(place.location.lat, place.location.long),
-        #     time.time(), has_chicken)
 
         # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
         print "%s Page to return is %s"%(id, str(time.time()-t1))
@@ -115,6 +108,7 @@ class JustEatSource(ChickenSource):
     @defer.inlineCallbacks
     def Setup(self):
         yield self.POOL.start()
+        reactor.addSystemEventTrigger("before", "shutdown", self.POOL.stop)
         defer.returnValue(None)
 
     @defer.inlineCallbacks
@@ -183,14 +177,32 @@ class JustEatSource(ChickenSource):
             futures = [self.POOL.doWork(FetchChickenPlaceCommand, id=id,
                                         info=json.dumps(page_places[id])) for id in places_not_in_db]
             results = yield defer.DeferredList(futures)
+
+            insert_command =\
+                """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"""
+
             for success,result in results:
                 if success:
                     if result["has_chicken"]:
                         place_dict = json.loads(result["place"])
-                        print place_dict
                         place_dict["location"] = GeoPoint(*place_dict["location"])
                         place = ChickenPlace(**place_dict)
                         returner.update({result["id"]:place})
+
+                        db.pool.runOperation(insert_command,(
+                            result["id"], place.id, place.title, place.address,
+                             "%s,%s"%(place.location.lat, place.location.long),
+                             time.time(), True)
+                        )
+                    else:
+                        db.pool.runOperation(insert_command, (
+                            result["id"], "", "", "", "", time.time(), False
+                        ))
+
+
+
+
 
         place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
 
