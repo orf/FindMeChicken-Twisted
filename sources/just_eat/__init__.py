@@ -113,7 +113,8 @@ class JustEatSource(ChickenSource):
         t1 = time.time()
         print "Inserting ID %s"%id
         if HAS_LXML:
-            parser = yield threads.deferToThread(BeautifulSoup, just_eat_page, "lxml")
+            parser = BeautifulSoup(just_eat_page, "lxml")
+            #yield threads.deferToThread(BeautifulSoup, just_eat_page, "lxml")
         else:
             parser = BeautifulSoup(just_eat_page)
 
