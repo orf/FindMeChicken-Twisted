@@ -53,7 +53,7 @@ def chicken_finder(request):
         returner.append((geo.distance(location.geopoint, place.location), place))
 
     # Now each location hopefully has a resolved GeoPoint we can sort the Locations by the distance from us
-    returner = [(d, p._asdict()) for d,p in sorted(returner, key=operator.itemgetter(0))]
+    returner = [(d, p._asdict()) for d,p in sorted(returner, key=operator.itemgetter(0))[:10]]
     t2 = time.time()
     print "Request took %s"%(t2-t1)
     defer.returnValue(json.dumps(returner))
