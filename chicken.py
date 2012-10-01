@@ -57,5 +57,3 @@ def chicken_finder(request):
     t2 = time.time()
     print "Request took %s"%(t2-t1)
     defer.returnValue(json.dumps(returner))
-
-run("localhost", 8080)
