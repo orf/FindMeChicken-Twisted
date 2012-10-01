@@ -1,11 +1,14 @@
 from sources import ChickenSource, ChickenPlace, GeoPoint
-from twisted.internet import defer, reactor, threads
+from twisted.internet import defer
 from twisted.web.client import getPage
 import logging
 from lib import cache, geo
 from bs4 import BeautifulSoup
 from sources.just_eat import db
+from ampoule import child, util, pool
+from twisted.protocols import amp
 import time
+import json
 
 IOS_USER_AGENT = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_2 like Mac OS X; en-us) "\
                  "AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8H7 "\
@@ -22,12 +25,97 @@ HAS_LXML = False
 try:
     import lxml
     HAS_LXML = True
+    del lxml
 except ImportError:
     print "Lxml not detected: Consider installing it for a speed boost"
+
+def get_parser(text):
+    if HAS_LXML:
+        return BeautifulSoup(text, "lxml")
+    return BeautifulSoup(text)
+
+class FetchChickenPlaceCommand(amp.Command):
+    response = [('has_chicken', amp.Boolean()),
+                ('place',amp.String()),
+                ('id',amp.Integer())]
+
+    arguments = [('id',amp.Integer()),
+                 ('info',amp.String())]
+
+class FetchChickenPlace(child.AMPChild):
+    @FetchChickenPlaceCommand.responder
+    @defer.inlineCallbacks
+    def fetchChickenPlace(self, id, info):
+        '''
+        I take an ID and a dictionary fetched from the JustEat page and I return a ChickenPlace with a geopoint.
+        I have to fetch some stuff from the JustEat website though, which is silly :(
+        I return (id, ChickenPlace)
+        '''
+        info = json.loads(info)
+        just_eat_page = yield getPage(str(HOST+info["identifier"]))
+        t1 = time.time()
+        print "Inserting ID %s"%id
+        parser = get_parser(just_eat_page)
+
+        print "%s - Parsed in %s"%(id,str(time.time()-t1))
+        has_chicken = False
+        for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
+            if "chicken" in tag.text.lower():
+                has_chicken = True
+                break
+
+        print "%s - Chicken got in %s"%(id,str(time.time()-t1))
+
+        address_1 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestAddress").text
+        address_2 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestZip").text
+
+        address = "%s, %s"%(address_1, " ".join(address_2.split()))
+        print "%s - Page to GeoPoint is %s"%(id, str(time.time()-t1))
+
+        if has_chicken:
+            geopoint_res = yield geo.address_to_geopoint({0:address})
+            geopoint = geopoint_res[0]
+        else:
+            geopoint = GeoPoint(0,0)
+
+        place = ChickenPlace(
+            id=info["identifier"],
+            source=JustEatSource.NAME,
+            title=info["title"],
+            address=address,
+            location=geopoint,
+            distance=None
+        )
+
+        print "%s - Page to DB is %s"%(id, str(time.time()-t1))
+
+        #insert_command = \
+        #    """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
+        #    VALUES (?, ?, ?, ?, ?, ?, ?)"""
+        #    (id, place.id, place.title, place.address, "%s,%s"%(place.location.lat, place.location.long),
+        #     time.time(), has_chicken)
+
+        # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
+        print "%s Page to return is %s"%(id, str(time.time()-t1))
+        if has_chicken:
+            returner = json.dumps(place)
+        else:
+            returner = json.dumps({})
+        defer.returnValue({"has_chicken":has_chicken,
+                           "place":returner,
+                           "id":id})
+
 
 class JustEatSource(ChickenSource):
     NAME = "JustEat"
     MENUS = True
+
+    POOL = pool.ProcessPool(FetchChickenPlace, min=8,max=8)
+
+    @defer.inlineCallbacks
+    def Setup(self):
+        yield self.POOL.start()
+        defer.returnValue(None)
 
     @defer.inlineCallbacks
     def GetPlaceMenu(self, place_id):
@@ -39,7 +127,7 @@ class JustEatSource(ChickenSource):
             defer.returnValue(cache_result)
 
         just_eat_page = yield getPage(str(HOST+place_id), agent=IOS_USER_AGENT)
-        parser = BeautifulSoup(just_eat_page, "lxml")
+        parser = get_parser(just_eat_page)
 
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
             if "chicken" in tag.text.lower():
@@ -61,7 +149,8 @@ class JustEatSource(ChickenSource):
 
         just_eat_page = yield getPage(BASE_URL.format(location.postcode),
             agent=IOS_USER_AGENT)
-        parser = BeautifulSoup(just_eat_page, "lxml")
+
+        parser = get_parser(just_eat_page)
         open_places_tag = parser.find(id="OpenRestaurants")
         if open_places_tag is None:
             defer.returnValue({})
@@ -91,70 +180,20 @@ class JustEatSource(ChickenSource):
                             if not i in places_with_no_chicken]
 
         if places_not_in_db:
-            futures = [self.fetchChickenPlace(id,page_places[id]) for id in places_not_in_db]
+            futures = [self.POOL.doWork(FetchChickenPlaceCommand, id=id,
+                                        info=json.dumps(page_places[id])) for id in places_not_in_db]
             results = yield defer.DeferredList(futures)
             for success,result in results:
                 if success:
-                    if result[1]:
-                        returner.update({result[0]:result[1]})
+                    if result["has_chicken"]:
+                        place_dict = json.loads(result["place"])
+                        place_dict["location"] = GeoPoint(*place_dict["location"])
+                        place = ChickenPlace(*place_dict)
+                        returner.update({result["id"]:place})
 
         place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
 
         defer.returnValue(returner)
-
-    @defer.inlineCallbacks
-    def fetchChickenPlace(self, id, info):
-        '''
-        I take an ID and a dictionary fetched from the JustEat page and I return a ChickenPlace with a geopoint.
-        I have to fetch some stuff from the JustEat website though, which is silly :(
-        I return (id, ChickenPlace)
-        '''
-        just_eat_page = yield getPage(str(HOST+info["identifier"]))
-        t1 = time.time()
-        print "Inserting ID %s"%id
-        if HAS_LXML:
-            parser = BeautifulSoup(just_eat_page, "lxml")
-            #yield threads.deferToThread(BeautifulSoup, just_eat_page, "lxml")
-        else:
-            parser = BeautifulSoup(just_eat_page)
-
-        print "%s - Parsed in %s"%(id,str(time.time()-t1))
-        has_chicken = False
-        for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
-            if "chicken" in tag.text.lower():
-                has_chicken = True
-                break
-
-        print "%s - Chicken got in %s"%(id,str(time.time()-t1))
-
-        address_1 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestAddress").text
-        address_2 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestZip").text
-
-        address = "%s, %s"%(address_1, " ".join(address_2.split()))
-        print "%s - Page to GeoPoint is %s"%(id, str(time.time()-t1))
-
-        geopoint = yield geo.address_to_geopoint({0:address})
-
-        place = ChickenPlace(
-            id=info["identifier"],
-            source=self.NAME,
-            title=info["title"],
-            address=address,
-            location=geopoint[0],
-            distance=None
-        )
-
-        print "%s - Page to DB is %s"%(id, str(time.time()-t1))
-
-        db.pool.runOperation(
-            """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (id, place.id, place.title, place.address, "%s,%s"%(place.location.lat, place.location.long),
-            time.time(), has_chicken)
-        )
-        # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
-        print "%s Page to return is %s"%(id, str(time.time()-t1))
-        defer.returnValue((id, [None, place][has_chicken]))
 
 
     @defer.inlineCallbacks

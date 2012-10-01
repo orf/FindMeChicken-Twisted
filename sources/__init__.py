@@ -11,6 +11,12 @@ class ChickenSource(object):
     # If the source supports fetching menus via GetPlaceMenu
     MENUS = None
 
+    def Setup(self):
+        '''
+        Get the source ready for work
+        '''
+        return None
+
     def GetAvailablePlaces(self, location):
         '''
         I take a Location namedtuple which contains a postcode (maybe) and a lat-long pair as well as a geohash of the
