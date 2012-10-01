@@ -2,7 +2,8 @@ from sources import ChickenSource, ChickenPlace, GeoPoint
 from twisted.internet import defer
 from twisted.web.client import getPage
 import logging
-from lib import cache, BeautifulSoup, geo
+from lib import cache, geo
+from bs4 import BeautifulSoup
 from sources.just_eat import db
 import time
 
@@ -31,7 +32,7 @@ class JustEatSource(ChickenSource):
             defer.returnValue(cache_result)
 
         just_eat_page = yield getPage(str(HOST+place_id), agent=IOS_USER_AGENT)
-        parser = BeautifulSoup.BeautifulSoup(just_eat_page)
+        parser = BeautifulSoup(just_eat_page)
 
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
             if "chicken" in tag.text.lower():
@@ -53,7 +54,7 @@ class JustEatSource(ChickenSource):
 
         just_eat_page = yield getPage(BASE_URL.format(location.postcode),
             agent=IOS_USER_AGENT)
-        parser = BeautifulSoup.BeautifulSoup(just_eat_page)
+        parser = BeautifulSoup(just_eat_page)
         open_places_tag = parser.find(id="OpenRestaurants")
         page_places = {}
         for place_root_tag in open_places_tag.findAll("li"):
@@ -98,20 +99,24 @@ class JustEatSource(ChickenSource):
         I have to fetch some stuff from the JustEat website though, which is silly :(
         I return (id, ChickenPlace)
         '''
-
         just_eat_page = yield getPage(str(HOST+info["identifier"]))
+        t1 = time.time()
         print "Inserting ID %s"%id
-        parser = BeautifulSoup.BeautifulSoup(just_eat_page)
-
+        parser = BeautifulSoup(just_eat_page)
+        print "%s - Parsed in %s"%(id,str(time.time()-t1))
         has_chicken = False
         for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
             if "chicken" in tag.text.lower():
                 has_chicken = True
+                break
+
+        print "%s - Chicken got in %s"%(id,str(time.time()-t1))
 
         address_1 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestAddress").text
         address_2 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestZip").text
 
         address = "%s, %s"%(address_1, " ".join(address_2.split()))
+        print "%s - Page to GeoPoint is %s"%(id, str(time.time()-t1))
 
         geopoint = yield geo.address_to_geopoint({0:address})
 
@@ -124,6 +129,8 @@ class JustEatSource(ChickenSource):
             distance=None
         )
 
+        print "%s - Page to DB is %s"%(id, str(time.time()-t1))
+
         db.pool.runOperation(
             """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -131,6 +138,7 @@ class JustEatSource(ChickenSource):
             time.time(), has_chicken)
         )
         # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
+        print "%s Page to return is %s"%(id, str(time.time()-t1))
         defer.returnValue((id, [None, place][has_chicken]))
 
 
