@@ -29,7 +29,7 @@ class KFCSource(ChickenSource):
             chick_place = ChickenPlace(
                 source = self.NAME,
                 id = place["storeName"],
-                title = place["storeName"],
+                title = place["storeName"].capitalize(),
                 address = "%s %s %s %s"%(place["address1"],
                                          place["address2"],
                                          place["address3"],
