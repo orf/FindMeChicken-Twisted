@@ -1,4 +1,4 @@
-from klein import run, route
+from klein import run, route, resource
 from twisted.internet import defer, reactor
 from lib import geo, geohash
 import json
