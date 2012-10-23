@@ -3,7 +3,8 @@ from collections import namedtuple
 
 Location = namedtuple("Location", "postcode geopoint geohash")
 GeoPoint = namedtuple("GeoPoint","lat long")
-ChickenPlace = namedtuple("ChickenPlace", "id source title address location distance")
+ChickenPlace = namedtuple("ChickenPlace", "Id Source Title Address Location Distance MenuAvailable")
+ChickenMenuItem = namedtuple("ChickenMenuItem", "Name Price")
 
 class ChickenSource(object):
     # The name of the source

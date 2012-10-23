@@ -1,14 +1,15 @@
-from sources import ChickenSource, ChickenPlace, GeoPoint
+from sources import ChickenSource, ChickenPlace, GeoPoint, ChickenMenuItem
 from twisted.internet import defer, reactor
 from twisted.web.client import getPage
-import logging
+from twisted.python import log
 from lib import cache, geo
 from bs4 import BeautifulSoup
 from sources.just_eat import db
-from ampoule import child, util, pool
+from ampoule import child, pool
 from twisted.protocols import amp
 import time
 import json
+import traceback
 
 IOS_USER_AGENT = "Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_2 like Mac OS X; en-us) "\
                  "AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8H7 "\
@@ -42,10 +43,47 @@ class FetchChickenPlaceCommand(amp.Command):
     arguments = [('id',amp.Integer()),
                  ('info',amp.String())]
 
+
+class FetchChickenMenuCommand(amp.Command):
+    response = [('response', amp.String())]
+    arguments = [('id', amp.String())]
+
+class FetchChickenMenu(child.AMPChild):
+    @FetchChickenMenuCommand.responder
+    @defer.inlineCallbacks
+    def fetchChickenMenu(self, id):
+        print "Running..."
+        just_eat_page = yield getPage(str(HOST+id), agent=IOS_USER_AGENT)
+        parser = get_parser(just_eat_page)
+
+        returner = []
+
+        for tag in parser.findAll("li", attrs={"class":"cat"}):
+            title_text = tag.find("h2").text
+            if "chicken" in title_text.lower():
+                # Extract the stuff
+                for item in tag.find("ul", attrs={"class":"cat-child"}).findAll("li"):
+                    title = item.find("h3").text
+                    price = item.find("span").text
+                    returner.append(ChickenMenuItem(title, price)._asdict())
+
+        defer.returnValue({"response":json.dumps(returner)})
+
+
 class FetchChickenPlace(child.AMPChild):
     @FetchChickenPlaceCommand.responder
     @defer.inlineCallbacks
     def fetchChickenPlace(self, id, info):
+        try:
+            r = yield self._fetchChickenPlace(id, info)
+            defer.returnValue(r)
+        except Exception,e:
+            print traceback.format_exc()
+            defer.returnValue(None)
+
+
+    @defer.inlineCallbacks
+    def _fetchChickenPlace(self, id, info):
         '''
         I take an ID and a dictionary fetched from the JustEat page and I return a ChickenPlace with a geopoint.
         I have to fetch some stuff from the JustEat website though, which is silly :(
@@ -65,11 +103,13 @@ class FetchChickenPlace(child.AMPChild):
                 break
 
         print "%s - Chicken got in %s"%(id,str(time.time()-t1))
+        addresses = []
+        address_components = parser.find("span", attrs={"itemprop":"address"})
 
-        address_1 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestAddress").text
-        address_2 = parser.find(id="ctl00_ContentPlaceHolder1_RestInfo_lblRestZip").text
+        for comp in address_components.findAll("span"):
+            addresses.append(comp.text)
 
-        address = "%s, %s"%(address_1, " ".join(address_2.split()))
+        address =(", ".join(addresses)).strip()
         print "%s - Page to GeoPoint is %s"%(id, str(time.time()-t1))
 
         if has_chicken:
@@ -79,14 +119,14 @@ class FetchChickenPlace(child.AMPChild):
             geopoint = GeoPoint(0,0)
 
         place = ChickenPlace(
-            id=info["identifier"],
-            source=JustEatSource.NAME,
-            title=info["title"],
-            address=address,
-            location=geopoint,
-            distance=None
+            Id=info["identifier"],
+            Source=JustEatSource.NAME,
+            Title=info["title"],
+            Address=address,
+            Location=geopoint,
+            Distance=None,
+            MenuAvailable=True
         )
-
 
         # Return (id,None) if there is no chicken or (id,ChickenPlace) if there is chicken.
         print "%s Page to return is %s"%(id, str(time.time()-t1))
@@ -104,11 +144,13 @@ class JustEatSource(ChickenSource):
     MENUS = True
 
     POOL = pool.ProcessPool(FetchChickenPlace, min=8,max=8)
+    MENU_POOL = pool.ProcessPool(FetchChickenMenu, min=4, max=4)
 
     @defer.inlineCallbacks
     def Setup(self):
         yield self.POOL.start()
         reactor.addSystemEventTrigger("before", "shutdown", self.POOL.stop)
+        reactor.addSystemEventTrigger("before", "shutdown", self.MENU_POOL.stop)
         defer.returnValue(None)
 
     @defer.inlineCallbacks
@@ -119,28 +161,25 @@ class JustEatSource(ChickenSource):
         cache_result = menu_cache.get(place_id)
         if cache_result is not None:
             defer.returnValue(cache_result)
-
-        just_eat_page = yield getPage(str(HOST+place_id), agent=IOS_USER_AGENT)
-        parser = get_parser(just_eat_page)
-
-        for tag in parser.findAll("h2", attrs={"class":"H2MC"}):
-            if "chicken" in tag.text.lower():
-                has_chicken = True
+        result = yield self.MENU_POOL.doWork(FetchChickenMenuCommand, id=place_id)
+        defer.returnValue(result["response"])
 
 
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):
+        log.msg("Starting JustEat")
 
         if not location.postcode:
-            logging.info("No postcode given in location, cannot get ChickenPlaces")
+            log.msg("No postcode given in location, cannot get ChickenPlaces")
             defer.returnValue({})
 
         cache_result = place_cache.get(location.postcode)
         if cache_result is not None:
+            log.msg("Postcode in cache, returning result")
             defer.returnValue(cache_result)
 
         returner = {}
-
+        log.msg("Opening just eat page")
         just_eat_page = yield getPage(BASE_URL.format(location.postcode),
             agent=IOS_USER_AGENT)
 
@@ -186,23 +225,19 @@ class JustEatSource(ChickenSource):
                 if success:
                     if result["has_chicken"]:
                         place_dict = json.loads(result["place"])
-                        place_dict["location"] = GeoPoint(*place_dict["location"])
+                        place_dict["Location"] = GeoPoint(*place_dict["Location"])
                         place = ChickenPlace(**place_dict)
                         returner.update({result["id"]:place})
 
                         db.pool.runOperation(insert_command,(
-                            result["id"], place.id, place.title, place.address,
-                             "%s,%s"%(place.location.lat, place.location.long),
+                            result["id"], place.Id, place.Title, place.Address,
+                             "%s,%s"%(place.Location.lat, place.Location.long),
                              time.time(), True)
                         )
                     else:
                         db.pool.runOperation(insert_command, (
                             result["id"], "", "", "", "", time.time(), False
                         ))
-
-
-
-
 
         place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
 
@@ -228,12 +263,13 @@ class JustEatSource(ChickenSource):
             else:
                 lat,long = row[4].split(",")
                 returner[row[0]] = ChickenPlace(
-                    id=row[1],
-                    source=self.NAME,
-                    title=row[2],
-                    address=row[3],
-                    location=GeoPoint(float(lat), float(long)),
-                    distance=None
+                    Id=row[1],
+                    Source=self.NAME,
+                    Title=row[2],
+                    Address=row[3],
+                    Location=GeoPoint(float(lat), float(long)),
+                    Distance=None,
+                    MenuAvailable=True
                 )
 
         defer.returnValue((returner, no_chicken))

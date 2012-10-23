@@ -15,7 +15,7 @@ postcode_cache = cache.getCache("geo_postcode")
 @defer.inlineCallbacks
 def geopoint_to_postcode(geopoint, ghash=None):
     result = yield geopoint_to_address(geopoint, ghash)
-    pcode = result["postal"]
+    pcode = result["postal"] or result["uzip"]
     if not pcode:
         defer.returnValue(None)
     else:
@@ -32,7 +32,12 @@ def geopoint_to_address(geopoint, ghash=None):
     else:
         # Lookup the address
         page = yield getPage(get_reverse_uri(geopoint))
-        address = json.loads(page)["ResultSet"]["Result"]
+        rset = json.loads(page)["ResultSet"]
+        if "Result" in rset:
+            address = rset["Result"]
+        else:
+            address = rset["Results"][0]
+
         postcode_cache.set(ghash, address)
         defer.returnValue(address)
 
@@ -56,7 +61,11 @@ def address_to_geopoint(addresses):
 
         for id,deferred in futures.items():
             parsed = json.loads(deferred.result)
-            location = parsed["ResultSet"]["Result"]
+            rset = parsed["ResultSet"]
+            if "Result" in rset:
+                location = rset["Result"]
+            else:
+                location = rset["Results"][0]
             returner[id] = GeoPoint(float(location["latitude"]),
                                     float(location["longitude"]))
             address_cache.set(addresses[id], returner[id])

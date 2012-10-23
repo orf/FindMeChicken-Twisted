@@ -27,16 +27,17 @@ class KFCSource(ChickenSource):
         returner = {}
         for place in json_response:
             chick_place = ChickenPlace(
-                source = self.NAME,
-                id = place["storeName"],
-                title = place["storeName"].capitalize(),
-                address = "%s %s %s %s"%(place["address1"],
+                Source = self.NAME,
+                Id = place["storeName"],
+                Title = "KFC: " + place["storeName"].capitalize(),
+                Address = "%s %s %s %s"%(place["address1"],
                                          place["address2"],
                                          place["address3"],
                                          place["postcode"]),
-                location = GeoPoint(place["latitude"], place["longitude"]),
-                distance = float(place.get("distance",-1)))
-            returner[chick_place.id] = chick_place
+                Location = GeoPoint(place["latitude"], place["longitude"]),
+                Distance = float(place.get("distance",-1)),
+                MenuAvailable=False)
+            returner[chick_place.Id] = chick_place
 
         kfc_cache.set(location.geohash, returner, timeout=60*60*24)
         defer.returnValue(returner)
