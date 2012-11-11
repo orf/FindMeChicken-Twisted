@@ -18,7 +18,6 @@ BASE_URL = HOST + "/area/{0}"
 
 ALLOWED_FOOD_TYPES = set(("pizza","kebabs","american"))
 
-place_cache = cache.getCache("place_cache")
 menu_cache = cache.getCache("menu_cache")
 
 HAS_LXML = False
@@ -143,6 +142,7 @@ class FetchChickenPlace(child.AMPChild):
 class JustEatSource(ChickenSource):
     NAME = "JustEat"
     MENUS = True
+    NEEDS_POSTCODE = True
 
     POOL = pool.ProcessPool(FetchChickenPlace, min=8,max=8)
     MENU_POOL = pool.ProcessPool(FetchChickenMenu, min=4, max=4)
@@ -166,18 +166,10 @@ class JustEatSource(ChickenSource):
         defer.returnValue(result["response"])
 
 
+    @cache.CacheResult
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):
         log.msg("Starting JustEat")
-
-        if not location.postcode:
-            log.msg("No postcode given in location, cannot get ChickenPlaces")
-            defer.returnValue({})
-
-        cache_result = place_cache.get(location.postcode)
-        if cache_result is not None:
-            log.msg("Postcode in cache, returning result")
-            defer.returnValue(cache_result)
 
         returner = {}
         log.msg("Opening just eat page")
@@ -233,7 +225,5 @@ class JustEatSource(ChickenSource):
 
             if len(to_add):
                 db.addPlacesToDatabase(self.NAME, to_add)
-
-        place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
 
         defer.returnValue(returner)

@@ -12,6 +12,7 @@ kfc_cache = cache.getCache("kfc_places")
 class KFCSource(ChickenSource):
     NAME = "KFC"
     MENUS = False
+    NEEDS_POSTCODE = False
 
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):

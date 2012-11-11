@@ -11,6 +11,8 @@ class ChickenSource(object):
     NAME = ""
     # If the source supports fetching menus via GetPlaceMenu
     MENUS = None
+    # If true then GetAvailablePlaces won't be called if no postcode is available.
+    NEEDS_POSTCODE = None
 
     def Setup(self):
         '''

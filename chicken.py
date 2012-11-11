@@ -52,6 +52,8 @@ def chicken_finder(request):
     futures = []
 
     for name,instance in SOURCES.items():
+        if instance.NEEDS_POSTCODE and not location.postcode:
+            continue
         futures.append(instance.GetAvailablePlaces(location))
     results = yield defer.DeferredList(futures)
 
