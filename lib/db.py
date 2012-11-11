@@ -21,8 +21,6 @@ def addPlacesToDatabase(source, places):
                 (id, source, place.Id, place.Title, place.Address,
                     "%s,%s"%(place.Location.lat, place.Location.long),
                     time.time(), True))
-    print insert_command
-    print args
     pool.runQuery(insert_command, args)
 
 
@@ -60,7 +58,7 @@ def setup_database():
     conn = sqlite3.connect(settings.DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""CREATE TABLE IF NOT EXISTS places (
-        id INTEGER NOT NULL,
+        id TEXT NOT NULL,
         source TEXT NOT NULL,
         identifier TEXT NOT NULL,
         title TEXT NOT NULL,
