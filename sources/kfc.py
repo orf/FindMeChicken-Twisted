@@ -21,8 +21,11 @@ class KFCSource(ChickenSource):
         if not cache_result is None:
             logging.info("Got KFC's from cache")
             defer.returnValue(cache_result)
-
-        kfc_result = yield getPage(BASE_URL.format(location.geopoint.lat, location.geopoint.long))
+        try:
+            kfc_result = yield getPage(BASE_URL.format(location.geopoint.lat,
+                                    location.geopoint.long), timeout=5)
+        except Exception:
+            defer.returnValue({})
         json_response = json.loads(kfc_result)
 
         returner = {}

@@ -51,7 +51,11 @@ class FetchChickenMenu(child.AMPChild):
     @defer.inlineCallbacks
     def fetchChickenMenu(self, id):
         print "Running..."
-        just_eat_page = yield getPage(str(HOST+id), agent=IOS_USER_AGENT)
+        try:
+            just_eat_page = yield getPage(str(HOST+id), agent=IOS_USER_AGENT,
+                                          timeut=5)
+        except Exception:
+            defer.returnValue({})
         parser = get_parser(just_eat_page)
 
         returner = []

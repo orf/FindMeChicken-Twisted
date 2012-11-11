@@ -29,16 +29,20 @@ class HungryHouseSource(ChickenSource):
             price = item.find("div", attrs={"class":"menuItemPrice"}).find("span").text
             item_title_tag = " ".join([x.string.strip() for x in
                                     item.find("div", attrs={"class":"menuItemName"}).find("a").contents])
-            items.append(ChickenMenuItem(item_title_tag, price)._asdict())
+            items.append(ChickenMenuItem(item_title_tag.capitalize(),
+                                        price)._asdict())
         defer.returnValue(json.dumps(items))
 
     @cache.CacheResult("places")
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):
         log.msg("Fetching HungryHouse places")
-
-        hungry_house_page = yield getPage(FETCH_URL.format(location.postcode),
-                                        agent=CHROME_USER_AGENT)
+        try:
+            hungry_house_page = yield getPage(FETCH_URL.format(location.postcode),
+                                            agent=CHROME_USER_AGENT,
+                                            timeout=5)
+        except Exception:
+            defer.returnValue({})
         log.msg("Fetched, parsing")
         parser = BeautifulSoup(hungry_house_page)
         log.msg("Parsed")
