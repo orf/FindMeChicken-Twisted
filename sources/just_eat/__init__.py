@@ -2,9 +2,8 @@ from sources import ChickenSource, ChickenPlace, GeoPoint, ChickenMenuItem
 from twisted.internet import defer, reactor
 from twisted.web.client import getPage
 from twisted.python import log
-from lib import cache, geo
+from lib import cache, geo, db
 from bs4 import BeautifulSoup
-from sources.just_eat import db
 from ampoule import child, pool
 from twisted.protocols import amp
 import time
@@ -67,9 +66,8 @@ class FetchChickenMenu(child.AMPChild):
                         title = item.find("h3").text
                         price = item.find("span", attrs={"class":"varient vprice"}).text
                         returner.append(ChickenMenuItem(title, price)._asdict())
-                    except Exception:
-                        pass
-
+                    except Exception,e:
+                        log.err()
         defer.returnValue({"response":json.dumps(returner)})
 
 
@@ -209,7 +207,7 @@ class JustEatSource(ChickenSource):
         if not page_places:
             defer.returnValue({})
 
-        places_from_db, places_with_no_chicken = yield self.getPlacesFromDatabase(page_places.keys())
+        places_from_db, places_with_no_chicken = yield db.getPlacesFromDatabase(self.NAME, page_places.keys())
         returner.update(places_from_db)
 
         places_not_in_db = [i for i in set(page_places.keys()).difference(set(places_from_db.keys()))
@@ -220,9 +218,7 @@ class JustEatSource(ChickenSource):
                                         info=json.dumps(page_places[id])) for id in places_not_in_db]
             results = yield defer.DeferredList(futures)
 
-            insert_command =\
-                """INSERT OR REPLACE INTO places (id, identifier, title, address, geopoint, created, has_chicken)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)"""
+            to_add = {}
 
             for success,result in results:
                 if success:
@@ -231,48 +227,13 @@ class JustEatSource(ChickenSource):
                         place_dict["Location"] = GeoPoint(*place_dict["Location"])
                         place = ChickenPlace(**place_dict)
                         returner.update({result["id"]:place})
-
-                        db.pool.runOperation(insert_command,(
-                            result["id"], place.Id, place.Title, place.Address,
-                             "%s,%s"%(place.Location.lat, place.Location.long),
-                             time.time(), True)
-                        )
+                        to_add[result["id"]] = place
                     else:
-                        db.pool.runOperation(insert_command, (
-                            result["id"], "", "", "", "", time.time(), False
-                        ))
+                        to_add[result["id"]] = None
+
+            if len(to_add):
+                db.addPlacesToDatabase(self.NAME, to_add)
 
         place_cache.set(location.postcode, returner, timeout=60*20) # 20 min expire time
 
         defer.returnValue(returner)
-
-
-    @defer.inlineCallbacks
-    def getPlacesFromDatabase(self, ids):
-        print "Fetching IDs: %s"%ids
-        a_week_ago = time.time() - 604800 # 604800 seconds in a week
-
-        query = "SELECT * FROM places WHERE created > ? AND id IN (%s)"%",".join("?" for i in ids)
-        params = [a_week_ago]
-        params.extend(ids)
-        places_from_database = yield db.pool.runQuery(query, params)
-
-        returner = {}
-        no_chicken = []
-
-        for row in places_from_database:
-            if row[6] == False:
-                no_chicken.append(row[0])
-            else:
-                lat,long = row[4].split(",")
-                returner[row[0]] = ChickenPlace(
-                    Id=row[1],
-                    Source=self.NAME,
-                    Title=row[2],
-                    Address=row[3],
-                    Location=GeoPoint(float(lat), float(long)),
-                    Distance=None,
-                    MenuAvailable=True
-                )
-
-        defer.returnValue((returner, no_chicken))

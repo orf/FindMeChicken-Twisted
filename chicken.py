@@ -2,7 +2,7 @@ from klein import run, route, resource
 from twisted.internet import defer, reactor
 from lib import geo, geohash
 import json
-from sources import kfc, just_eat, Location, GeoPoint
+from sources import kfc, just_eat, Location, GeoPoint, hungry_house
 import operator
 import logging
 import time
@@ -10,7 +10,8 @@ import sys
 
 SOURCES = {
     "KFC":kfc.KFCSource(),
-    "JustEat":just_eat.JustEatSource()
+    "JustEat":just_eat.JustEatSource(),
+    #"HungryHouse":hungry_house.HungryHouseSource()
 }
 
 @defer.inlineCallbacks
