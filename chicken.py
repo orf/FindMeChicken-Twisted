@@ -11,7 +11,7 @@ import sys
 SOURCES = {
     "KFC":kfc.KFCSource(),
     "JustEat":just_eat.JustEatSource(),
-    "HungryHouse":hungry_house.HungryHouseSource()
+    #"HungryHouse":hungry_house.HungryHouseSource()
 }
 
 @defer.inlineCallbacks

@@ -194,7 +194,7 @@ class JustEatSource(ChickenSource):
                 continue
 
             place["identifier"] = place_root_tag.find("a")["href"]
-            page_places[int(place_root_tag["data-restaurantid"])] = place
+            page_places[place_root_tag["data-restaurantid"]] = place
 
         if not page_places:
             defer.returnValue({})
@@ -202,9 +202,10 @@ class JustEatSource(ChickenSource):
         places_from_db, places_with_no_chicken = yield db.getPlacesFromDatabase(self.NAME, page_places.keys())
         returner.update(places_from_db)
 
-        places_not_in_db = [i for i in set(page_places.keys()).difference(set(places_from_db.keys()))
+        places_not_in_db = [i for i in set(page_places.keys()).difference(set([x for x in places_from_db.keys()]))
                             if not i in places_with_no_chicken]
-
+        print len(page_places.keys())
+        print "%s places not in db"%len(places_not_in_db)
         if places_not_in_db:
             futures = [self.POOL.doWork(FetchChickenPlaceCommand, id=id,
                                         info=json.dumps(page_places[id])) for id in places_not_in_db]
