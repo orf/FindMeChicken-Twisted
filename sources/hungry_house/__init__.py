@@ -45,7 +45,7 @@ class HungryHouseSource(ChickenSource):
                 Id=place_id,
                 Source=self.NAME,
                 Title=place_title,
-                Address=place_address,
+                Address=place_address.strip("\t"),
                 Location=gp,
                 Distance=None,
                 MenuAvailable=self.MENUS

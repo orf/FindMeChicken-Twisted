@@ -51,6 +51,8 @@ def chicken_finder(request):
 
     futures = []
 
+    titles_cache = []
+
     for name,instance in SOURCES.items():
         if instance.NEEDS_POSTCODE and not location.postcode:
             continue
@@ -59,10 +61,13 @@ def chicken_finder(request):
 
     for result in results:
         if result[0]:
-            places.update(result[1])
+            for id,p in result[1].items():
+                if p.Title not in titles_cache:
+                    titles_cache.append(p.Title)
+                    places[id] = p
 
     # Some sources may already have set the location. Filter those out and get the geopoints
-    geopoints = yield geo.address_to_geopoint({l.Id:l.Aaddress
+    geopoints = yield geo.address_to_geopoint({l.Id:l.Address
                                                for l in places.values()
                                                if l.Location is None})
 
