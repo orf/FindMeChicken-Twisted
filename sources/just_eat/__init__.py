@@ -154,19 +154,17 @@ class JustEatSource(ChickenSource):
         reactor.addSystemEventTrigger("before", "shutdown", self.MENU_POOL.stop)
         defer.returnValue(None)
 
+    @cache.CacheResult("menu")
     @defer.inlineCallbacks
     def GetPlaceMenu(self, place_id):
         '''
         I take an ID and I fetch the menu from the website. Go me!
         '''
-        cache_result = menu_cache.get(place_id)
-        if cache_result is not None:
-            defer.returnValue(cache_result)
         result = yield self.MENU_POOL.doWork(FetchChickenMenuCommand, id=place_id)
         defer.returnValue(result["response"])
 
 
-    @cache.CacheResult
+    @cache.CacheResult("places")
     @defer.inlineCallbacks
     def GetAvailablePlaces(self, location):
         log.msg("Starting JustEat")

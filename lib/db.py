@@ -51,7 +51,6 @@ def getPlacesFromDatabase(source, ids):
                 Distance=None,
                 MenuAvailable=True
             )
-    print "Got %s places from database"%len(returner)
     defer.returnValue((returner, no_chicken))
 
 def setup_database():
