@@ -8,8 +8,8 @@ import urlparse
 import json
 import re
 
-FETCH_URL = "http://search.hungryhouse.co.uk/restaurants/{0}/Burgers-_-Chicken/0-20?q=fried%20chicken"
-MENU_URL = "http://hungryhouse.co.uk/ajax{0}/menu?q=fried%20chicken"
+FETCH_URL = 'http://search.hungryhouse.co.uk/restaurants/{0}/Burgers-_-Chicken/0-20?q="fried%20chicken"'
+MENU_URL = 'http://hungryhouse.co.uk/ajax{0}/menu?q="fried%20chicken"'
 CHROME_USER_AGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11"
 
 
@@ -29,7 +29,7 @@ class HungryHouseSource(ChickenSource):
             price = item.find("div", attrs={"class":"menuItemPrice"}).find("span").text
             item_title_tag = " ".join([x.string.strip() for x in
                                     item.find("div", attrs={"class":"menuItemName"}).find("a").contents])
-            items.append(ChickenMenuItem(item_title_tag, price))
+            items.append(ChickenMenuItem(item_title_tag, price)._asdict())
         defer.returnValue(json.dumps(items))
 
     @cache.CacheResult("places")
