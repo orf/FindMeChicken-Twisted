@@ -53,9 +53,11 @@ class FetchChickenMenu(child.AMPChild):
         print "Running..."
         try:
             just_eat_page = yield getPage(str(HOST+id), agent=IOS_USER_AGENT,
-                                          timeut=5)
-        except Exception:
-            defer.returnValue({})
+                                          timeout=5)
+        except Exception,e:
+            print "Could not get just eat page: %s"%e
+            defer.returnValue({"response":"{}"})
+
         parser = get_parser(just_eat_page)
 
         returner = []
@@ -148,7 +150,7 @@ class JustEatSource(ChickenSource):
     MENUS = True
     NEEDS_POSTCODE = True
 
-    POOL = pool.ProcessPool(FetchChickenPlace, min=8,max=8)
+    POOL = pool.ProcessPool(FetchChickenPlace, min=8,max=15)
     MENU_POOL = pool.ProcessPool(FetchChickenMenu, min=4, max=4)
 
     @defer.inlineCallbacks
