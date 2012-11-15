@@ -26,7 +26,9 @@ class HungryHouseSource(ChickenSource):
         parser = BeautifulSoup(menu_page)
         items = []
         for item in parser.find_all("tr", attrs={"class":"menuItem"}):
-            price = item.find("div", attrs={"class":"menuItemPrice"}).find("span").text
+            price_tag = item.find("div", attrs={"class":"menuItemPrice"})
+            if price_tag is None: continue
+            price = price_tag.find("span").text
             item_title_tag = " ".join([x.string.strip() for x in
                                     item.find("div", attrs={"class":"menuItemName"}).find("a").contents])
             items.append(ChickenMenuItem(item_title_tag.capitalize(),
