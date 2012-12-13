@@ -66,12 +66,12 @@ class FetchChickenMenu(child.AMPChild):
             title_text = tag.find("h2").text
             if "chicken" in title_text.lower():
                 # Extract the stuff
-                for item in tag.find("ul", attrs={"class":"cat-child"}).find_all("li", recursive=False):
+                for item in tag.find("ul").find_all("li", recursive=False):
                     try:
                         title = item.find("h3").text
                         price = item.find("span", attrs={"class":"varient vprice"}).text
                         returner.append(ChickenMenuItem(title, price)._asdict())
-                    except Exception,e:
+                    except Exception:
                         log.err()
         defer.returnValue({"response":json.dumps(returner)})
 

@@ -53,7 +53,7 @@ class HungryHouseSource(ChickenSource):
         for place in parser.findAll("div", attrs={"class":"restsSearchItemRes"}):
             place_link = place.find("a", attrs={"class":"restPageLink"})
             place_id = place_link["href"]
-            place_title = place_link["title"]
+            place_title = place_link["title"].replace("sponsored","")
 
             place_map_div = place.find("div", attrs={"class":"restsMap"})
             place_address = " ".join([x.strip() for x in place_map_div.find("div")
